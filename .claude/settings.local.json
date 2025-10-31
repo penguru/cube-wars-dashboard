@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(firebase deploy:*)",
+      "Read(//Users/serhataydin/Repositories/Last-Wave-Analytics-Dashboard/backend/**)",
+      "Bash(killall:*)",
+      "Bash(gcloud run deploy:*)",
+      "Bash(npm run build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
