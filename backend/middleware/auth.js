@@ -12,6 +12,8 @@ const ALLOWED_EMAILS = [
   'deniz.luleci@mobsmile.com',
   'sibel.bekar@mobsmile.com',
   'sinan.bingol@mobsmile.com',
+  'hello@snackgamer.com',
+  'shakeelunity3d@gmail.com',
   
   // Add more authorized emails here
 ];

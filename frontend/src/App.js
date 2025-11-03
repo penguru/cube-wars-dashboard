@@ -365,6 +365,7 @@ const Dashboard = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Count</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unique Users</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg per User</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg per User (All)</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -374,6 +375,7 @@ const Dashboard = () => {
                   <td className="px-6 py-4 text-sm text-gray-500">{item.total_count.toLocaleString()}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{item.unique_users.toLocaleString()}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{item.avg_per_user}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{item.avg_per_all_users}</td>
                 </tr>
               ))}
             </tbody>

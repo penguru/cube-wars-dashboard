@@ -81,7 +81,7 @@ const buildCohortCTE = (startDate, endDate, platform, country, version) => {
           user_pseudo_id,
           MIN(DATE(TIMESTAMP_MICROS(event_timestamp))) as cohort_date
         FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
-        WHERE 1=1
+        WHERE event_name = 'first_open'
         ${buildPlatformFilter(platform)}
         ${buildCountryFilter(country)}
         ${buildVersionFilter(version)}
@@ -141,6 +141,19 @@ app.get('/api/rewarded-ads', async (req, res) => {
     const query = `
       WITH
       ${buildCohortCTE(startDate, endDate, platform, country, version)}
+      all_events AS (
+        SELECT user_pseudo_id
+        FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
+        WHERE 1=1
+        ${buildPlatformFilter(platform)}
+        ${buildCountryFilter(country)}
+        ${buildVersionFilter(version)}
+      ),
+      total_user_count AS (
+        SELECT COUNT(DISTINCT ae.user_pseudo_id) as total_users
+        FROM all_events ae
+        ${buildCohortJoin(startDate, endDate, 'ae')}
+      ),
       main AS (
         SELECT
           event_name,
@@ -155,14 +168,18 @@ app.get('/api/rewarded-ads', async (req, res) => {
         main.event_name,
         COUNT(*) as total_count,
         COUNT(DISTINCT main.user_pseudo_id) as unique_users,
-        ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT main.user_pseudo_id), 2) as avg_per_user
+        ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT main.user_pseudo_id), 2) as avg_per_user,
+        tuc.total_users,
+        ROUND(COUNT(*) * 1.0 / tuc.total_users, 2) as avg_per_all_users
       FROM main
       ${buildCohortJoin(startDate, endDate)}
-      GROUP BY main.event_name
+      CROSS JOIN total_user_count tuc
+      GROUP BY main.event_name, tuc.total_users
       ORDER BY total_count DESC
     `;
 
     const [rows] = await bigquery.query(query);
+    console.log('Rewarded Ads Query Result Sample:', JSON.stringify(rows[0], null, 2));
     res.json(rows);
   } catch (error) {
     console.error('Error fetching rewarded ads:', error);

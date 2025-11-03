@@ -5,7 +5,8 @@
       "Read(//Users/serhataydin/Repositories/Last-Wave-Analytics-Dashboard/backend/**)",
       "Bash(killall:*)",
       "Bash(gcloud run deploy:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(gcloud run services logs read:*)"
     ],
     "deny": [],
     "ask": []
