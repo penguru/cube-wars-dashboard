@@ -181,7 +181,30 @@ app.get('/api/rewarded-ads', async (req, res) => {
 
     const [rows] = await bigquery.query(query);
     console.log('Rewarded Ads Query Result Sample:', JSON.stringify(rows[0], null, 2));
-    res.json(rows);
+
+    // Calculate totals
+    if (rows.length > 0) {
+      const totalCount = rows.reduce((sum, row) => sum + row.total_count, 0);
+      const allUniqueUsers = new Set();
+      rows.forEach(row => {
+        // Count unique users across all event types
+        if (row.unique_users) allUniqueUsers.add(row.unique_users);
+      });
+      const totalUsers = rows[0].total_users || 0;
+
+      const totals = {
+        event_name: 'TOTAL',
+        total_count: totalCount,
+        unique_users: rows.reduce((sum, row) => sum + row.unique_users, 0),
+        avg_per_user: totalCount > 0 ? parseFloat((totalCount / rows.reduce((sum, row) => sum + row.unique_users, 0)).toFixed(2)) : 0,
+        total_users: totalUsers,
+        avg_per_all_users: totalUsers > 0 ? parseFloat((totalCount / totalUsers).toFixed(2)) : 0
+      };
+
+      res.json({ rows, totals });
+    } else {
+      res.json({ rows, totals: null });
+    }
   } catch (error) {
     console.error('Error fetching rewarded ads:', error);
     res.status(500).json({ error: 'Internal server error' });

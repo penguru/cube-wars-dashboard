@@ -36,7 +36,7 @@ const Dashboard = () => {
   });
 
   const [data, setData] = useState({
-    rewardedAds: [],
+    rewardedAds: { rows: [], totals: null },
     levelAnalysis: [],
     levelSilverBoost: [],
     unitLoadout: { unitFrequency: [], topLoadouts: [] },
@@ -117,8 +117,24 @@ const Dashboard = () => {
         return data || {};
       };
 
+      // Parse rewarded ads with totals
+      const rewardedAdsData = await (async (response) => {
+        if (!response.ok) {
+          return { rows: [], totals: null };
+        }
+        const data = await response.json();
+        // Handle both old format (array) and new format (object with rows/totals)
+        if (Array.isArray(data)) {
+          return { rows: data, totals: null };
+        }
+        return {
+          rows: Array.isArray(data.rows) ? data.rows : [],
+          totals: data.totals || null
+        };
+      })(rewardedAdsRes);
+
       setData({
-        rewardedAds: await safeParseArray(rewardedAdsRes),
+        rewardedAds: rewardedAdsData,
         levelAnalysis: await safeParseArray(levelAnalysisRes),
         levelSilverBoost: await safeParseArray(silverBoostRes),
         unitLoadout: await safeParseUnitLoadout(unitLoadoutRes),
@@ -307,7 +323,8 @@ const Dashboard = () => {
 
   const OverviewTab = () => {
     const stats = data.overallStats;
-    const totalRewardedAds = data.rewardedAds.reduce((sum, item) => sum + item.total_count, 0);
+    const totalRewardedAds = data.rewardedAds.totals ? data.rewardedAds.totals.total_count :
+      (data.rewardedAds.rows || []).reduce((sum, item) => sum + item.total_count, 0);
     const avgCompletionRate = data.levelAnalysis.length > 0
       ? (data.levelAnalysis.reduce((sum, item) => sum + (item.completion_rate || 0), 0) / data.levelAnalysis.length).toFixed(1)
       : 0;
@@ -339,7 +356,7 @@ const Dashboard = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold mb-4">Top 10 Rewarded Ads</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={data.rewardedAds.slice(0, 10)}>
+              <BarChart data={(data.rewardedAds.rows || []).slice(0, 10)}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="event_name" angle={-45} textAnchor="end" height={100} interval={0} fontSize={10} />
                 <YAxis />
@@ -369,7 +386,7 @@ const Dashboard = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {data.rewardedAds.map((item, index) => (
+              {data.rewardedAds.rows.map((item, index) => (
                 <tr key={index}>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.event_name.replace('RV_Watched_', '').replace(/_/g, ' ')}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{item.total_count.toLocaleString()}</td>
@@ -378,6 +395,15 @@ const Dashboard = () => {
                   <td className="px-6 py-4 text-sm text-gray-500">{item.avg_per_all_users}</td>
                 </tr>
               ))}
+              {data.rewardedAds.totals && (
+                <tr className="bg-gray-100 font-bold border-t-2 border-gray-400">
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.event_name}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.total_count.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.unique_users.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.avg_per_user}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.avg_per_all_users}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -388,7 +414,7 @@ const Dashboard = () => {
         <ResponsiveContainer width="100%" height={400}>
           <PieChart>
             <Pie
-              data={data.rewardedAds}
+              data={data.rewardedAds.rows}
               cx="50%"
               cy="50%"
               labelLine={false}
@@ -397,7 +423,7 @@ const Dashboard = () => {
               fill="#8884d8"
               dataKey="total_count"
             >
-              {data.rewardedAds.map((entry, index) => (
+              {data.rewardedAds.rows.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>
