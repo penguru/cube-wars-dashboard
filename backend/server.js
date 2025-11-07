@@ -693,17 +693,26 @@ app.get('/api/overall-stats', async (req, res) => {
 // 10. Get Available Countries
 app.get('/api/available-countries', async (req, res) => {
   try {
-    const { startDate, endDate, platform } = req.query;
+    const { startDate, endDate, platform, version } = req.query;
 
     const query = `
-      SELECT DISTINCT
-        geo.country as country,
-        COUNT(DISTINCT user_pseudo_id) as user_count
-      FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
-      WHERE geo.country IS NOT NULL
-      ${buildDateFilter(startDate, endDate)}
-      ${buildPlatformFilter(platform)}
-      GROUP BY geo.country
+      WITH
+      ${buildCohortCTE(startDate, endDate, platform, null, version)}
+      main AS (
+        SELECT DISTINCT
+          user_pseudo_id,
+          geo.country as country
+        FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
+        WHERE geo.country IS NOT NULL
+        ${buildPlatformFilter(platform)}
+        ${buildVersionFilter(version)}
+      )
+      SELECT
+        main.country,
+        COUNT(DISTINCT main.user_pseudo_id) as user_count
+      FROM main
+      ${buildCohortJoin(startDate, endDate)}
+      GROUP BY main.country
       ORDER BY user_count DESC
       LIMIT 100
     `;
@@ -719,17 +728,26 @@ app.get('/api/available-countries', async (req, res) => {
 // 11. Get Available Versions
 app.get('/api/available-versions', async (req, res) => {
   try {
-    const { startDate, endDate, platform } = req.query;
+    const { startDate, endDate, platform, country } = req.query;
 
     const query = `
-      SELECT DISTINCT
-        app_info.version as version,
-        COUNT(DISTINCT user_pseudo_id) as user_count
-      FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
-      WHERE app_info.version IS NOT NULL
-      ${buildDateFilter(startDate, endDate)}
-      ${buildPlatformFilter(platform)}
-      GROUP BY app_info.version
+      WITH
+      ${buildCohortCTE(startDate, endDate, platform, country, null)}
+      main AS (
+        SELECT DISTINCT
+          user_pseudo_id,
+          app_info.version as version
+        FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
+        WHERE app_info.version IS NOT NULL
+        ${buildPlatformFilter(platform)}
+        ${buildCountryFilter(country)}
+      )
+      SELECT
+        main.version,
+        COUNT(DISTINCT main.user_pseudo_id) as user_count
+      FROM main
+      ${buildCohortJoin(startDate, endDate)}
+      GROUP BY main.version
       ORDER BY version DESC
       LIMIT 50
     `;
