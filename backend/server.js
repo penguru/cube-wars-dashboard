@@ -160,6 +160,7 @@ app.get('/api/rewarded-ads', async (req, res) => {
           user_pseudo_id
         FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
         WHERE event_name LIKE 'RV_Watched_%'
+        ${buildDateFilter(startDate, endDate)}
         ${buildPlatformFilter(platform)}
         ${buildCountryFilter(country)}
         ${buildVersionFilter(version)}
