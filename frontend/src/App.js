@@ -51,6 +51,9 @@ const Dashboard = () => {
   const [availableVersions, setAvailableVersions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedRewardedAd, setSelectedRewardedAd] = useState(null);
+  const [selectedRewardedAdPattern, setSelectedRewardedAdPattern] = useState(null);
+  const [cohortData, setCohortData] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -144,6 +147,11 @@ const Dashboard = () => {
         baseStationUpgrades: await safeParseArray(baseStationRes),
         overallStats: await safeParseObject(overallStatsRes),
       });
+
+      // If we're viewing cohort analysis, refresh that data too
+      if (selectedRewardedAdPattern) {
+        await fetchCohortData(selectedRewardedAdPattern, false);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     }
@@ -174,6 +182,54 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching filter options:', error);
+    }
+  };
+
+  const fetchCohortData = async (eventName, shouldSetLoading = true) => {
+    if (shouldSetLoading) {
+      setLoading(true);
+    }
+    try {
+      const params = new URLSearchParams({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        platform: filters.platform,
+        country: filters.country,
+        version: filters.version,
+        eventName: eventName,
+      });
+
+      console.log('Fetching cohort data with params:', {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        platform: filters.platform,
+        country: filters.country,
+        version: filters.version,
+        eventName: eventName,
+      });
+
+      const response = await fetch(`${API_BASE_URL}/rewarded-ads-cohort?${params}`, {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Cohort data received, rows:', data.length);
+        if (data.length > 0) {
+          console.log('First row:', data[0]);
+        }
+        setCohortData(data);
+      }
+    } catch (error) {
+      console.error('Error fetching cohort data:', error);
+    }
+    if (shouldSetLoading) {
+      setLoading(false);
     }
   };
 
@@ -387,8 +443,17 @@ const Dashboard = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {data.rewardedAds.rows.map((item, index) => (
-                <tr key={index}>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.event_name.replace('RV_Watched_', '').replace(/_/g, ' ')}</td>
+                <tr
+                  key={index}
+                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                  onClick={() => {
+                    setSelectedRewardedAd(item.event_name);
+                    setSelectedRewardedAdPattern(item.event_name);
+                    setActiveTab('cohort-analysis');
+                    fetchCohortData(item.event_name);
+                  }}
+                >
+                  <td className="px-6 py-4 text-sm font-medium text-blue-600 hover:text-blue-800">{item.event_name.replace('RV_Watched_', '').replace(/_/g, ' ')}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{item.total_count.toLocaleString()}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{item.unique_users.toLocaleString()}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{item.avg_per_user}</td>
@@ -396,8 +461,16 @@ const Dashboard = () => {
                 </tr>
               ))}
               {data.rewardedAds.totals && (
-                <tr className="bg-gray-100 font-bold border-t-2 border-gray-400">
-                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.event_name}</td>
+                <tr
+                  className="bg-gray-100 font-bold border-t-2 border-gray-400 hover:bg-gray-200 cursor-pointer transition-colors"
+                  onClick={() => {
+                    setSelectedRewardedAd('ALL_REWARDED_ADS');
+                    setSelectedRewardedAdPattern('RV_Watched_%');
+                    setActiveTab('cohort-analysis');
+                    fetchCohortData('RV_Watched_%');
+                  }}
+                >
+                  <td className="px-6 py-4 text-sm font-bold text-blue-700 hover:text-blue-900">{data.rewardedAds.totals.event_name}</td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.total_count.toLocaleString()}</td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.unique_users.toLocaleString()}</td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-900">{data.rewardedAds.totals.avg_per_user}</td>
@@ -690,6 +763,104 @@ const Dashboard = () => {
     );
   };
 
+  const CohortAnalysisTab = () => {
+    if (!selectedRewardedAd) {
+      return (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <p className="text-gray-500">Please select a rewarded ad from the Rewarded Ads Performance table.</p>
+        </div>
+      );
+    }
+
+    const days = [0, 1, 2, 3, 4, 5, 6, 7, 14, 30, 45, 60, 75, 90];
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">
+              Cohort Analysis: {selectedRewardedAd === 'ALL_REWARDED_ADS' ? 'All Rewarded Ads' : selectedRewardedAd.replace('RV_Watched_', '').replace(/_/g, ' ')}
+            </h3>
+            <button
+              onClick={() => {
+                setSelectedRewardedAd(null);
+                setActiveTab('rewarded-ads');
+              }}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            >
+              Back to Rewarded Ads
+            </button>
+          </div>
+
+          {cohortData.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No cohort data available for the selected filters.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">Install Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cohort Size</th>
+                    {days.map(day => (
+                      <th key={day} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Day {day}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {cohortData.map((cohort, index) => {
+                    // Helper to safely get numeric value
+                    const getNumValue = (val) => {
+                      if (val === null || val === undefined) return 0;
+                      if (typeof val === 'object' && val.value !== undefined) return Number(val.value);
+                      return Number(val);
+                    };
+
+                    // Helper to safely get string value (for dates)
+                    const getStringValue = (val) => {
+                      if (val === null || val === undefined) return '';
+                      if (typeof val === 'object' && val.value !== undefined) return String(val.value);
+                      return String(val);
+                    };
+
+                    const cohortSize = getNumValue(cohort.cohort_size);
+                    const installDate = getStringValue(cohort.install_date);
+
+                    return (
+                      <tr key={index}>
+                        <td className="px-4 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                          {installDate}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-900 font-semibold">
+                          {cohortSize.toLocaleString()}
+                        </td>
+                        {days.map(day => {
+                          const events = getNumValue(cohort[`day_${day}_events`]);
+                          const users = getNumValue(cohort[`day_${day}_users`]);
+                          const avg = users > 0 ? (events / users).toFixed(2) : '0.00';
+                          return (
+                            <td key={day} className="px-4 py-4 text-sm text-gray-500">
+                              <div>{events.toLocaleString()}</div>
+                              <div className="text-xs text-gray-400">({avg})</div>
+                              <div className="text-xs text-blue-500">{users}</div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const OtherAnalyticsTab = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -766,6 +937,8 @@ const Dashboard = () => {
         return <OverviewTab />;
       case 'rewarded-ads':
         return <RewardedAdsTab />;
+      case 'cohort-analysis':
+        return <CohortAnalysisTab />;
       case 'level-analysis':
         return <LevelAnalysisTab />;
       case 'unit-analysis':
