@@ -826,6 +826,26 @@ const Dashboard = () => {
         return String(val);
       };
 
+      // Calculate max average across all cells for color scaling
+      const allAverages = cohortData.flatMap(cohort =>
+        days.map(day => {
+          const events = getNumValue(cohort[`day_${day}_events`]);
+          const users = getNumValue(cohort[`day_${day}_users`]);
+          return users > 0 ? events / users : 0;
+        })
+      );
+      const maxAvg = Math.max(...allAverages, 1);
+
+      const getColorClass = (avg) => {
+        if (avg === 0) return 'bg-gray-50';
+        const intensity = avg / maxAvg;
+        if (intensity >= 0.8) return 'bg-blue-600 text-white';
+        if (intensity >= 0.6) return 'bg-blue-500 text-white';
+        if (intensity >= 0.4) return 'bg-blue-400 text-white';
+        if (intensity >= 0.2) return 'bg-blue-300 text-gray-900';
+        return 'bg-blue-100 text-gray-900';
+      };
+
       return (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h3 className="text-lg font-semibold mb-4">{title}</h3>
@@ -863,12 +883,14 @@ const Dashboard = () => {
                         {days.map(day => {
                           const events = getNumValue(cohort[`day_${day}_events`]);
                           const users = getNumValue(cohort[`day_${day}_users`]);
-                          const avg = users > 0 ? (events / users).toFixed(2) : '0.00';
+                          const avgNum = users > 0 ? events / users : 0;
+                          const avg = avgNum.toFixed(2);
+                          const colorClass = getColorClass(avgNum);
                           return (
-                            <td key={day} className="px-4 py-4 text-sm text-gray-500">
+                            <td key={day} className={`px-4 py-4 text-sm ${colorClass}`}>
                               <div>{events.toLocaleString()}</div>
-                              <div className="text-xs text-gray-400">({avg})</div>
-                              <div className="text-xs text-blue-500">{users}</div>
+                              <div className="text-xs font-bold">({avg})</div>
+                              <div className="text-xs opacity-75">{users}</div>
                             </td>
                           );
                         })}
@@ -901,6 +923,40 @@ const Dashboard = () => {
     }
 
     const days = [0, 1, 2, 3, 4, 5, 6, 7, 14, 30, 45, 60, 75, 90];
+
+    // Helper to safely get numeric value
+    const getNumValue = (val) => {
+      if (val === null || val === undefined) return 0;
+      if (typeof val === 'object' && val.value !== undefined) return Number(val.value);
+      return Number(val);
+    };
+
+    // Helper to safely get string value (for dates)
+    const getStringValue = (val) => {
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object' && val.value !== undefined) return String(val.value);
+      return String(val);
+    };
+
+    // Calculate max average across all cells for color scaling
+    const allAverages = cohortData.flatMap(cohort =>
+      days.map(day => {
+        const events = getNumValue(cohort[`day_${day}_events`]);
+        const users = getNumValue(cohort[`day_${day}_users`]);
+        return users > 0 ? events / users : 0;
+      })
+    );
+    const maxAvg = Math.max(...allAverages, 1);
+
+    const getColorClass = (avg) => {
+      if (avg === 0) return 'bg-gray-50';
+      const intensity = avg / maxAvg;
+      if (intensity >= 0.8) return 'bg-blue-600 text-white';
+      if (intensity >= 0.6) return 'bg-blue-500 text-white';
+      if (intensity >= 0.4) return 'bg-blue-400 text-white';
+      if (intensity >= 0.2) return 'bg-blue-300 text-gray-900';
+      return 'bg-blue-100 text-gray-900';
+    };
 
     return (
       <div className="space-y-6">
@@ -940,20 +996,6 @@ const Dashboard = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {cohortData.map((cohort, index) => {
-                    // Helper to safely get numeric value
-                    const getNumValue = (val) => {
-                      if (val === null || val === undefined) return 0;
-                      if (typeof val === 'object' && val.value !== undefined) return Number(val.value);
-                      return Number(val);
-                    };
-
-                    // Helper to safely get string value (for dates)
-                    const getStringValue = (val) => {
-                      if (val === null || val === undefined) return '';
-                      if (typeof val === 'object' && val.value !== undefined) return String(val.value);
-                      return String(val);
-                    };
-
                     const cohortSize = getNumValue(cohort.cohort_size);
                     const installDate = getStringValue(cohort.install_date);
 
@@ -968,12 +1010,14 @@ const Dashboard = () => {
                         {days.map(day => {
                           const events = getNumValue(cohort[`day_${day}_events`]);
                           const users = getNumValue(cohort[`day_${day}_users`]);
-                          const avg = users > 0 ? (events / users).toFixed(2) : '0.00';
+                          const avgNum = users > 0 ? events / users : 0;
+                          const avg = avgNum.toFixed(2);
+                          const colorClass = getColorClass(avgNum);
                           return (
-                            <td key={day} className="px-4 py-4 text-sm text-gray-500">
+                            <td key={day} className={`px-4 py-4 text-sm ${colorClass}`}>
                               <div>{events.toLocaleString()}</div>
-                              <div className="text-xs text-gray-400">({avg})</div>
-                              <div className="text-xs text-blue-500">{users}</div>
+                              <div className="text-xs font-bold">({avg})</div>
+                              <div className="text-xs opacity-75">{users}</div>
                             </td>
                           );
                         })}
