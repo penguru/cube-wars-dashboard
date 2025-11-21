@@ -919,6 +919,139 @@ app.get('/api/rewarded-ads-cohort', async (req, res) => {
   }
 });
 
+// 13. Ad Impressions Cohort Analysis
+app.get('/api/ad-impressions-cohort', async (req, res) => {
+  try {
+    const { startDate, endDate, platform, country, version, adFormat } = req.query;
+
+    console.log('Ad Impressions Cohort Request:', { startDate, endDate, platform, country, version, adFormat });
+
+    if (!adFormat) {
+      return res.status(400).json({ error: 'adFormat parameter is required' });
+    }
+
+    const query = `
+      WITH
+      ${buildCohortCTE(startDate, endDate, platform, country, version)}
+      user_first_open AS (
+        SELECT
+          user_pseudo_id,
+          MIN(DATE(TIMESTAMP_MICROS(event_timestamp))) as install_date
+        FROM \`${process.env.BIGQUERY_DATASET}.events_*\`
+        WHERE event_name = 'first_open'
+        ${buildPlatformFilter(platform)}
+        ${buildCountryFilter(country)}
+        ${buildVersionFilter(version)}
+        GROUP BY user_pseudo_id
+      ),
+      cohorted_users AS (
+        SELECT ufo.*
+        FROM user_first_open ufo
+        ${buildCohortJoin(startDate, endDate, 'ufo')}
+      ),
+      all_events AS (
+        SELECT
+          cu.install_date,
+          cu.user_pseudo_id,
+          DATE(TIMESTAMP_MICROS(e.event_timestamp)) as event_date,
+          e.event_name,
+          (SELECT value.string_value FROM UNNEST(e.event_params) WHERE key = 'ad_format') as ad_format,
+          DATE_DIFF(DATE(TIMESTAMP_MICROS(e.event_timestamp)), cu.install_date, DAY) as days_since_install
+        FROM cohorted_users cu
+        LEFT JOIN \`${process.env.BIGQUERY_DATASET}.events_*\` e
+          ON cu.user_pseudo_id = e.user_pseudo_id
+      ),
+      impression_counts AS (
+        SELECT
+          install_date,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 0) as day_0_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 1) as day_1_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 2) as day_2_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 3) as day_3_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 4) as day_4_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 5) as day_5_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 6) as day_6_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 7) as day_7_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 14) as day_14_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 30) as day_30_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 45) as day_45_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 60) as day_60_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 75) as day_75_events,
+          COUNTIF(event_name = 'ad_impression' AND ad_format = '${adFormat}' AND days_since_install = 90) as day_90_events
+        FROM all_events
+        GROUP BY install_date
+      ),
+      active_user_counts AS (
+        SELECT
+          install_date,
+          COUNT(DISTINCT user_pseudo_id) as cohort_size,
+          COUNT(DISTINCT CASE WHEN days_since_install = 0 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_0_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 1 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_1_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 2 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_2_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 3 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_3_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 4 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_4_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 5 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_5_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 6 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_6_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 7 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_7_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 14 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_14_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 30 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_30_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 45 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_45_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 60 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_60_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 75 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_75_users,
+          COUNT(DISTINCT CASE WHEN days_since_install = 90 AND event_name IS NOT NULL THEN user_pseudo_id END) as day_90_users
+        FROM all_events
+        GROUP BY install_date
+      )
+      SELECT
+        auc.install_date,
+        auc.cohort_size,
+        ic.day_0_events,
+        auc.day_0_users,
+        ic.day_1_events,
+        auc.day_1_users,
+        ic.day_2_events,
+        auc.day_2_users,
+        ic.day_3_events,
+        auc.day_3_users,
+        ic.day_4_events,
+        auc.day_4_users,
+        ic.day_5_events,
+        auc.day_5_users,
+        ic.day_6_events,
+        auc.day_6_users,
+        ic.day_7_events,
+        auc.day_7_users,
+        ic.day_14_events,
+        auc.day_14_users,
+        ic.day_30_events,
+        auc.day_30_users,
+        ic.day_45_events,
+        auc.day_45_users,
+        ic.day_60_events,
+        auc.day_60_users,
+        ic.day_75_events,
+        auc.day_75_users,
+        ic.day_90_events,
+        auc.day_90_users
+      FROM active_user_counts auc
+      LEFT JOIN impression_counts ic ON auc.install_date = ic.install_date
+      ORDER BY auc.install_date ASC
+      LIMIT 100
+    `;
+
+    console.log('Generated Query:', query);
+    const [rows] = await bigquery.query(query);
+    console.log('Query Results Row Count:', rows.length);
+    if (rows.length > 0) {
+      console.log('First Row:', JSON.stringify(rows[0], null, 2));
+    }
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching ad impressions cohort:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Cube Wars Analytics API running on port ${port}`);
 });

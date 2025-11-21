@@ -54,6 +54,8 @@ const Dashboard = () => {
   const [selectedRewardedAd, setSelectedRewardedAd] = useState(null);
   const [selectedRewardedAdPattern, setSelectedRewardedAdPattern] = useState(null);
   const [cohortData, setCohortData] = useState([]);
+  const [interstitialCohortData, setInterstitialCohortData] = useState([]);
+  const [rewardedAdCohortData, setRewardedAdCohortData] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -231,6 +233,51 @@ const Dashboard = () => {
     if (shouldSetLoading) {
       setLoading(false);
     }
+  };
+
+  const fetchAdImpressionsCohort = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        platform: filters.platform,
+        country: filters.country,
+        version: filters.version,
+      });
+
+      const [interstitialRes, rewardedRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/ad-impressions-cohort?${params}&adFormat=INTER`, {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }),
+        fetch(`${API_BASE_URL}/ad-impressions-cohort?${params}&adFormat=REWARDED`, {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }),
+      ]);
+
+      if (interstitialRes.ok) {
+        const data = await interstitialRes.json();
+        setInterstitialCohortData(data);
+      }
+
+      if (rewardedRes.ok) {
+        const data = await rewardedRes.json();
+        setRewardedAdCohortData(data);
+      }
+    } catch (error) {
+      console.error('Error fetching ad impressions cohort:', error);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -763,6 +810,87 @@ const Dashboard = () => {
     );
   };
 
+  const AdImpressionsTab = () => {
+    const days = [0, 1, 2, 3, 4, 5, 6, 7, 14, 30, 45, 60, 75, 90];
+
+    const renderCohortTable = (title, cohortData) => {
+      const getNumValue = (val) => {
+        if (val === null || val === undefined) return 0;
+        if (typeof val === 'object' && val.value !== undefined) return Number(val.value);
+        return Number(val);
+      };
+
+      const getStringValue = (val) => {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'object' && val.value !== undefined) return String(val.value);
+        return String(val);
+      };
+
+      return (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h3 className="text-lg font-semibold mb-4">{title}</h3>
+          {cohortData.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No data available for the selected filters.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">Install Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cohort Size</th>
+                    {days.map(day => (
+                      <th key={day} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Day {day}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {cohortData.map((cohort, index) => {
+                    const cohortSize = getNumValue(cohort.cohort_size);
+                    const installDate = getStringValue(cohort.install_date);
+
+                    return (
+                      <tr key={index}>
+                        <td className="px-4 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                          {installDate}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-900 font-semibold">
+                          {cohortSize.toLocaleString()}
+                        </td>
+                        {days.map(day => {
+                          const events = getNumValue(cohort[`day_${day}_events`]);
+                          const users = getNumValue(cohort[`day_${day}_users`]);
+                          const avg = users > 0 ? (events / users).toFixed(2) : '0.00';
+                          return (
+                            <td key={day} className="px-4 py-4 text-sm text-gray-500">
+                              <div>{events.toLocaleString()}</div>
+                              <div className="text-xs text-gray-400">({avg})</div>
+                              <div className="text-xs text-blue-500">{users}</div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-6">
+        {renderCohortTable('Interstitial Ad Impressions', interstitialCohortData)}
+        {renderCohortTable('Rewarded Ad Impressions', rewardedAdCohortData)}
+      </div>
+    );
+  };
+
   const CohortAnalysisTab = () => {
     if (!selectedRewardedAd) {
       return (
@@ -939,6 +1067,8 @@ const Dashboard = () => {
         return <RewardedAdsTab />;
       case 'cohort-analysis':
         return <CohortAnalysisTab />;
+      case 'ad-impressions':
+        return <AdImpressionsTab />;
       case 'level-analysis':
         return <LevelAnalysisTab />;
       case 'unit-analysis':
@@ -989,6 +1119,7 @@ const Dashboard = () => {
             <nav className="flex space-x-4 flex-wrap gap-2">
               <TabButton id="overview" label="Overview" isActive={activeTab === 'overview'} onClick={setActiveTab} />
               <TabButton id="rewarded-ads" label="Rewarded Ads" isActive={activeTab === 'rewarded-ads'} onClick={setActiveTab} />
+              <TabButton id="ad-impressions" label="Ad Impressions" isActive={activeTab === 'ad-impressions'} onClick={(id) => { setActiveTab(id); fetchAdImpressionsCohort(); }} />
               <TabButton id="level-analysis" label="Level Analysis" isActive={activeTab === 'level-analysis'} onClick={setActiveTab} />
               <TabButton id="unit-analysis" label="Unit Analysis" isActive={activeTab === 'unit-analysis'} onClick={setActiveTab} />
               <TabButton id="churn" label="Churn Analysis" isActive={activeTab === 'churn'} onClick={setActiveTab} />
